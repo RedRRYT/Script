@@ -1,80 +1,9 @@
--- Prospext Executor v4
--- Full Client UI + Server Executor
--- Run from SERVER Dev Console
+-- Prospext Client Executor v1
+-- Fully client-only, run with Arecus X
 
-if not game:GetService("RunService"):IsServer() then
-	error("Run from SERVER dev console only")
-end
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Remotes
-local exec = ReplicatedStorage:FindFirstChild("ProspextExec") or Instance.new("RemoteEvent")
-exec.Name = "ProspextExec"
-exec.Parent = ReplicatedStorage
-
-local out = ReplicatedStorage:FindFirstChild("ProspextOutput") or Instance.new("RemoteEvent")
-out.Name = "ProspextOutput"
-out.Parent = ReplicatedStorage
-
--- ================= SERVER EXECUTOR =================
-local server = Instance.new("Script")
-server.Name = "ProspextServer"
-server.Source = [[
-local exec = game.ReplicatedStorage.ProspextExec
-local out = game.ReplicatedStorage.ProspextOutput
-
-local function send(plr, msg)
-	out:FireClient(plr, tostring(msg))
-end
-
-exec.OnServerEvent:Connect(function(plr, code)
-	if typeof(code) ~= "string" then return end
-
-	local env = {
-		print = function(...)
-			send(plr, table.concat({...}, " "))
-		end,
-		warn = function(...)
-			send(plr, "⚠️ "..table.concat({...}, " "))
-		end,
-		game = game,
-		workspace = workspace,
-		task = task,
-		wait = task.wait,
-		math = math,
-		string = string,
-		table = table,
-		pairs = pairs,
-		ipairs = ipairs
-	}
-
-	local fn, err = loadstring(code)
-	if not fn then
-		send(plr, err)
-		return
-	end
-
-	setfenv(fn, env)
-
-	local ok, res = pcall(fn)
-	if not ok then
-		send(plr, res)
-	end
-end)
-]]
-server.Parent = game.ServerScriptService
-
--- ================= CLIENT INJECTOR =================
-local function injectClient(player)
-	local ls = Instance.new("LocalScript")
-	ls.Name = "ProspextClient"
-	ls.Source = [[
-local player = game.Players.LocalPlayer
-local exec = game.ReplicatedStorage:WaitForChild("ProspextExec")
-local out = game.ReplicatedStorage:WaitForChild("ProspextOutput")
 local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
 
 -- ===== GUI =====
 local gui = Instance.new("ScreenGui")
@@ -155,8 +84,8 @@ box.TextColor3 = Color3.fromRGB(0,255,180)
 box.Text = 'print("prospext1700")'
 
 -- Buttons
-local function makeBtn(txt,x,y)
-	local b = Instance.new("TextButton", execPage)
+local function makeBtn(txt,x,y,parent)
+	local b = Instance.new("TextButton", parent or execPage)
 	b.Size = UDim2.fromScale(0.3,0.1)
 	b.Position = UDim2.fromScale(x,y)
 	b.Text = txt
@@ -170,7 +99,7 @@ local run = makeBtn("EXECUTE",0.35,0.72)
 local clearScript = makeBtn("CLEAR SCRIPT",0.05,0.72)
 local paste = makeBtn("PASTE",0.65,0.72)
 
--- Output
+-- Output box
 local outBox = Instance.new("TextBox", outPage)
 outBox.Size = UDim2.fromScale(0.96,0.8)
 outBox.Position = UDim2.fromScale(0.02,0.05)
@@ -182,18 +111,24 @@ outBox.TextYAlignment = Top
 outBox.TextSize = 15
 outBox.BackgroundColor3 = Color3.fromRGB(25,25,35)
 outBox.TextColor3 = Color3.fromRGB(200,200,200)
+outBox.Text = ""
 
-local clearOut = Instance.new("TextButton", outPage)
+local clearOut = makeBtn("CLEAR OUTPUT",0.3,0.87,outPage)
 clearOut.Size = UDim2.fromScale(0.4,0.1)
-clearOut.Position = UDim2.fromScale(0.3,0.87)
-clearOut.Text = "CLEAR OUTPUT"
 clearOut.BackgroundColor3 = Color3.fromRGB(180,60,60)
-clearOut.TextColor3 = Color3.new(1,1,1)
 
 -- ===== LOGIC =====
 run.MouseButton1Click:Connect(function()
 	outBox.Text = ""
-	exec:FireServer(box.Text)
+	local fn, err = loadstring(box.Text)
+	if not fn then
+		outBox.Text = err
+		return
+	end
+	local ok,res = pcall(fn)
+	if not ok then
+		outBox.Text = res
+	end
 end)
 
 clearScript.MouseButton1Click:Connect(function()
@@ -222,10 +157,6 @@ outTab.MouseButton1Click:Connect(function()
 	execTab.TextColor3 = Color3.fromRGB(180,180,180)
 end)
 
-out.OnClientEvent:Connect(function(msg)
-	outBox.Text ..= msg .. "\\n"
-end)
-
 -- Minimize / Restore
 min.MouseButton1Click:Connect(function()
 	main.Visible = false
@@ -237,7 +168,7 @@ floatBtn.MouseButton1Click:Connect(function()
 	floatBtn.Visible = false
 end)
 
--- ===== IDLE FADE =====
+-- ===== Idle Fade =====
 local lastInput = tick()
 local faded = false
 
@@ -262,10 +193,5 @@ task.spawn(function()
 		end
 	end
 end)
-]]
-	ls.Parent = player:WaitForChild("PlayerScripts")
-end
 
-Players.PlayerAdded:Connect(injectClient)
-
-print("✅ Prospext Executor v4 loaded")
+print("✅ Prospext Client Executor loaded")
