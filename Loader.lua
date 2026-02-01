@@ -1,109 +1,209 @@
--- Prospect Executor Loader
--- Run from SERVER dev console
+-- Prospext Executor v3
+-- Server loader, Client-only UI
 
 if not game:GetService("RunService"):IsServer() then
-	error("Run this from the SERVER console")
+	error("Run from SERVER dev console")
 end
 
--- SERVICES
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 
--- REMOTE
-local remote = ReplicatedStorage:FindFirstChild("ProspectExecute")
-if not remote then
-	remote = Instance.new("RemoteEvent")
-	remote.Name = "ProspectExecute"
-	remote.Parent = ReplicatedStorage
+-- Remotes
+local exec = ReplicatedStorage:FindFirstChild("ProspextExec") or Instance.new("RemoteEvent")
+exec.Name = "ProspextExec"
+exec.Parent = ReplicatedStorage
+
+local out = ReplicatedStorage:FindFirstChild("ProspextOutput") or Instance.new("RemoteEvent")
+out.Name = "ProspextOutput"
+out.Parent = ReplicatedStorage
+
+-- Server executor
+local server = Instance.new("Script")
+server.Name = "ProspextServer"
+server.Source = [[
+local exec = game.ReplicatedStorage.ProspextExec
+local out = game.ReplicatedStorage.ProspextOutput
+
+local function send(plr, msg)
+	out:FireClient(plr, tostring(msg))
 end
 
--- ADMIN LIST
-local ADMINS = {
-	["YourUsernameHere"] = true
-}
-
--- SERVER EXECUTOR
-local serverScript = Instance.new("Script")
-serverScript.Name = "ProspectServerExecutor"
-serverScript.Source = [[
-local Remote = game.ReplicatedStorage.ProspectExecute
-
-local ADMINS = {
-	["YourUsernameHere"] = true
-}
-
-Remote.OnServerEvent:Connect(function(player, code)
-	if not ADMINS[player.Name] then
-		warn("Blocked:", player.Name)
-		return
-	end
-	
+exec.OnServerEvent:Connect(function(plr, code)
 	if typeof(code) ~= "string" then return end
-	if #code > 8000 then return end
 
-	local func, err = loadstring(code)
-	if not func then
-		warn("Compile error:", err)
+	local env = {
+		print = function(...)
+			send(plr, table.concat({...}, " "))
+		end,
+		warn = function(...)
+			send(plr, "⚠️ "..table.concat({...}, " "))
+		end,
+		game = game,
+		workspace = workspace,
+		task = task,
+		wait = task.wait,
+		math = math,
+		string = string,
+		table = table,
+		pairs = pairs,
+		ipairs = ipairs
+	}
+
+	local fn, err = loadstring(code)
+	if not fn then
+		send(plr, err)
 		return
 	end
 
-	local ok, result = pcall(func)
+	setfenv(fn, env)
+	local ok, res = pcall(fn)
 	if not ok then
-		warn("Runtime error:", result)
+		send(plr, res)
 	end
 end)
 ]]
-serverScript.Parent = game.ServerScriptService
+server.Parent = game.ServerScriptService
+
+-- Client-only UI injector
+local function injectClient(player)
+	local ls = Instance.new("LocalScript")
+	ls.Name = "ProspextClient"
+	ls.Source = [[
+local player = game.Players.LocalPlayer
+local exec = game.ReplicatedStorage:WaitForChild("ProspextExec")
+local out = game.ReplicatedStorage:WaitForChild("ProspextOutput")
 
 -- GUI
 local gui = Instance.new("ScreenGui")
-gui.Name = "ProspectExecutor"
+gui.Name = "ProspextExecutor"
 gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromScale(0.5, 0.6)
-frame.Position = UDim2.fromScale(0.25, 0.2)
-frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.fromScale(0.95,0.85)
+main.Position = UDim2.fromScale(0.025,0.075)
+main.BackgroundColor3 = Color3.fromRGB(15,15,20)
+main.Active = true
+main.Draggable = true
 
-local box = Instance.new("TextBox", frame)
-box.Size = UDim2.fromScale(0.95, 0.8)
-box.Position = UDim2.fromScale(0.025, 0.05)
+-- Tabs
+local tabs = Instance.new("Frame", main)
+tabs.Size = UDim2.fromScale(1,0.1)
+tabs.BackgroundColor3 = Color3.fromRGB(20,20,30)
+
+local execTab = Instance.new("TextButton", tabs)
+execTab.Size = UDim2.fromScale(0.5,1)
+execTab.Text = "EXECUTOR"
+execTab.BackgroundTransparency = 1
+execTab.TextColor3 = Color3.fromRGB(0,255,180)
+
+local outTab = Instance.new("TextButton", tabs)
+outTab.Size = UDim2.fromScale(0.5,1)
+outTab.Position = UDim2.fromScale(0.5,0)
+outTab.Text = "OUTPUT"
+outTab.BackgroundTransparency = 1
+outTab.TextColor3 = Color3.fromRGB(180,180,180)
+
+-- Pages
+local execPage = Instance.new("Frame", main)
+execPage.Size = UDim2.fromScale(1,0.9)
+execPage.Position = UDim2.fromScale(0,0.1)
+execPage.BackgroundTransparency = 1
+
+local outPage = execPage:Clone()
+outPage.Visible = false
+outPage.Parent = main
+
+-- Script box
+local box = Instance.new("TextBox", execPage)
+box.Size = UDim2.fromScale(0.96,0.65)
+box.Position = UDim2.fromScale(0.02,0.03)
+box.MultiLine = true
 box.ClearTextOnFocus = false
+box.TextWrapped = true
 box.TextXAlignment = Left
 box.TextYAlignment = Top
-box.TextWrapped = true
-box.MultiLine = true
-box.Text = "-- Prospect Executor\nprint('Hello world')"
-box.BackgroundColor3 = Color3.fromRGB(30,30,30)
-box.TextColor3 = Color3.fromRGB(0,255,140)
+box.TextSize = 16
+box.BackgroundColor3 = Color3.fromRGB(25,25,35)
+box.TextColor3 = Color3.fromRGB(0,255,180)
+box.Text = 'print("prospext1700")'
 
-local btn = Instance.new("TextButton", frame)
-btn.Size = UDim2.fromScale(0.4, 0.1)
-btn.Position = UDim2.fromScale(0.3, 0.88)
-btn.Text = "EXECUTE"
-btn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
-btn.TextColor3 = Color3.new(1,1,1)
+-- Buttons
+local function btn(text, x, y)
+	local b = Instance.new("TextButton", execPage)
+	b.Size = UDim2.fromScale(0.3,0.1)
+	b.Position = UDim2.fromScale(x,y)
+	b.Text = text
+	b.TextSize = 16
+	b.BackgroundColor3 = Color3.fromRGB(0,180,120)
+	b.TextColor3 = Color3.new(1,1,1)
+	return b
+end
 
--- LOCAL SCRIPT
-local localScript = Instance.new("LocalScript", gui)
-localScript.Source = [[
-local Remote = game.ReplicatedStorage:WaitForChild("ProspectExecute")
-local gui = script.Parent
-local frame = gui.Frame
-local box = frame.TextBox
-local btn = frame.TextButton
+local run = btn("EXECUTE",0.35,0.72)
+local clearScript = btn("CLEAR SCRIPT",0.05,0.72)
+local paste = btn("PASTE",0.65,0.72)
 
-btn.MouseButton1Click:Connect(function()
-	Remote:FireServer(box.Text)
+-- Output box
+local outBox = Instance.new("TextBox", outPage)
+outBox.Size = UDim2.fromScale(0.96,0.8)
+outBox.Position = UDim2.fromScale(0.02,0.05)
+outBox.MultiLine = true
+outBox.TextWrapped = true
+outBox.ClearTextOnFocus = false
+outBox.TextXAlignment = Left
+outBox.TextYAlignment = Top
+outBox.TextSize = 15
+outBox.BackgroundColor3 = Color3.fromRGB(25,25,35)
+outBox.TextColor3 = Color3.fromRGB(200,200,200)
+outBox.Text = ""
+
+local clearOut = Instance.new("TextButton", outPage)
+clearOut.Size = UDim2.fromScale(0.4,0.1)
+clearOut.Position = UDim2.fromScale(0.3,0.87)
+clearOut.Text = "CLEAR OUTPUT"
+clearOut.BackgroundColor3 = Color3.fromRGB(180,60,60)
+clearOut.TextColor3 = Color3.new(1,1,1)
+
+-- Logic
+run.MouseButton1Click:Connect(function()
+	outBox.Text = ""
+	exec:FireServer(box.Text)
+end)
+
+clearScript.MouseButton1Click:Connect(function()
+	box.Text = ""
+end)
+
+paste.MouseButton1Click:Connect(function()
+	box:CaptureFocus() -- user uses system paste
+end)
+
+clearOut.MouseButton1Click:Connect(function()
+	outBox.Text = ""
+end)
+
+execTab.MouseButton1Click:Connect(function()
+	execPage.Visible = true
+	outPage.Visible = false
+	execTab.TextColor3 = Color3.fromRGB(0,255,180)
+	outTab.TextColor3 = Color3.fromRGB(180,180,180)
+end)
+
+outTab.MouseButton1Click:Connect(function()
+	execPage.Visible = false
+	outPage.Visible = true
+	outTab.TextColor3 = Color3.fromRGB(0,255,180)
+	execTab.TextColor3 = Color3.fromRGB(180,180,180)
+end)
+
+out.OnClientEvent:Connect(function(msg)
+	outBox.Text ..= msg .. "\\n"
 end)
 ]]
+	ls.Parent = player:WaitForChild("PlayerScripts")
+end
 
--- GIVE GUI TO ADMINS
-Players.PlayerAdded:Connect(function(plr)
-	if ADMINS[plr.Name] then
-		gui:Clone().Parent = plr:WaitForChild("PlayerGui")
-	end
-end)
+Players.PlayerAdded:Connect(injectClient)
 
-print("✅ Prospect Executor loaded")
+print("✅ Prospext Executor v3 loaded (client-only UI)")
