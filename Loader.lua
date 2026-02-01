@@ -1,8 +1,9 @@
--- Prospext Executor v3
--- Server loader, Client-only UI
+-- Prospext Executor v4
+-- Full Client UI + Server Executor
+-- Run from SERVER Dev Console
 
 if not game:GetService("RunService"):IsServer() then
-	error("Run from SERVER dev console")
+	error("Run from SERVER dev console only")
 end
 
 local Players = game:GetService("Players")
@@ -17,7 +18,7 @@ local out = ReplicatedStorage:FindFirstChild("ProspextOutput") or Instance.new("
 out.Name = "ProspextOutput"
 out.Parent = ReplicatedStorage
 
--- Server executor
+-- ================= SERVER EXECUTOR =================
 local server = Instance.new("Script")
 server.Name = "ProspextServer"
 server.Source = [[
@@ -56,6 +57,7 @@ exec.OnServerEvent:Connect(function(plr, code)
 	end
 
 	setfenv(fn, env)
+
 	local ok, res = pcall(fn)
 	if not ok then
 		send(plr, res)
@@ -64,7 +66,7 @@ end)
 ]]
 server.Parent = game.ServerScriptService
 
--- Client-only UI injector
+-- ================= CLIENT INJECTOR =================
 local function injectClient(player)
 	local ls = Instance.new("LocalScript")
 	ls.Name = "ProspextClient"
@@ -72,13 +74,27 @@ local function injectClient(player)
 local player = game.Players.LocalPlayer
 local exec = game.ReplicatedStorage:WaitForChild("ProspextExec")
 local out = game.ReplicatedStorage:WaitForChild("ProspextOutput")
+local TweenService = game:GetService("TweenService")
 
--- GUI
+-- ===== GUI =====
 local gui = Instance.new("ScreenGui")
 gui.Name = "ProspextExecutor"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
+-- Floating Button
+local floatBtn = Instance.new("TextButton", gui)
+floatBtn.Size = UDim2.fromScale(0.12,0.08)
+floatBtn.Position = UDim2.fromScale(0.02,0.8)
+floatBtn.Text = "≡"
+floatBtn.TextSize = 26
+floatBtn.BackgroundColor3 = Color3.fromRGB(0,180,120)
+floatBtn.TextColor3 = Color3.new(1,1,1)
+floatBtn.Visible = false
+floatBtn.Active = true
+floatBtn.Draggable = true
+
+-- Main Window
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.fromScale(0.95,0.85)
 main.Position = UDim2.fromScale(0.025,0.075)
@@ -86,9 +102,19 @@ main.BackgroundColor3 = Color3.fromRGB(15,15,20)
 main.Active = true
 main.Draggable = true
 
+-- Minimize
+local min = Instance.new("TextButton", main)
+min.Size = UDim2.fromScale(0.08,0.06)
+min.Position = UDim2.fromScale(0.9,0.02)
+min.Text = "—"
+min.TextSize = 20
+min.BackgroundColor3 = Color3.fromRGB(180,60,60)
+min.TextColor3 = Color3.new(1,1,1)
+
 -- Tabs
 local tabs = Instance.new("Frame", main)
 tabs.Size = UDim2.fromScale(1,0.1)
+tabs.Position = UDim2.fromScale(0,0.1)
 tabs.BackgroundColor3 = Color3.fromRGB(20,20,30)
 
 local execTab = Instance.new("TextButton", tabs)
@@ -129,22 +155,22 @@ box.TextColor3 = Color3.fromRGB(0,255,180)
 box.Text = 'print("prospext1700")'
 
 -- Buttons
-local function btn(text, x, y)
+local function makeBtn(txt,x,y)
 	local b = Instance.new("TextButton", execPage)
 	b.Size = UDim2.fromScale(0.3,0.1)
 	b.Position = UDim2.fromScale(x,y)
-	b.Text = text
+	b.Text = txt
 	b.TextSize = 16
 	b.BackgroundColor3 = Color3.fromRGB(0,180,120)
 	b.TextColor3 = Color3.new(1,1,1)
 	return b
 end
 
-local run = btn("EXECUTE",0.35,0.72)
-local clearScript = btn("CLEAR SCRIPT",0.05,0.72)
-local paste = btn("PASTE",0.65,0.72)
+local run = makeBtn("EXECUTE",0.35,0.72)
+local clearScript = makeBtn("CLEAR SCRIPT",0.05,0.72)
+local paste = makeBtn("PASTE",0.65,0.72)
 
--- Output box
+-- Output
 local outBox = Instance.new("TextBox", outPage)
 outBox.Size = UDim2.fromScale(0.96,0.8)
 outBox.Position = UDim2.fromScale(0.02,0.05)
@@ -156,7 +182,6 @@ outBox.TextYAlignment = Top
 outBox.TextSize = 15
 outBox.BackgroundColor3 = Color3.fromRGB(25,25,35)
 outBox.TextColor3 = Color3.fromRGB(200,200,200)
-outBox.Text = ""
 
 local clearOut = Instance.new("TextButton", outPage)
 clearOut.Size = UDim2.fromScale(0.4,0.1)
@@ -165,7 +190,7 @@ clearOut.Text = "CLEAR OUTPUT"
 clearOut.BackgroundColor3 = Color3.fromRGB(180,60,60)
 clearOut.TextColor3 = Color3.new(1,1,1)
 
--- Logic
+-- ===== LOGIC =====
 run.MouseButton1Click:Connect(function()
 	outBox.Text = ""
 	exec:FireServer(box.Text)
@@ -176,7 +201,7 @@ clearScript.MouseButton1Click:Connect(function()
 end)
 
 paste.MouseButton1Click:Connect(function()
-	box:CaptureFocus() -- user uses system paste
+	box:CaptureFocus()
 end)
 
 clearOut.MouseButton1Click:Connect(function()
@@ -200,10 +225,47 @@ end)
 out.OnClientEvent:Connect(function(msg)
 	outBox.Text ..= msg .. "\\n"
 end)
+
+-- Minimize / Restore
+min.MouseButton1Click:Connect(function()
+	main.Visible = false
+	floatBtn.Visible = true
+end)
+
+floatBtn.MouseButton1Click:Connect(function()
+	main.Visible = true
+	floatBtn.Visible = false
+end)
+
+-- ===== IDLE FADE =====
+local lastInput = tick()
+local faded = false
+
+local function fade(to)
+	TweenService:Create(main, TweenInfo.new(0.4), {BackgroundTransparency = to}):Play()
+end
+
+gui.InputBegan:Connect(function()
+	lastInput = tick()
+	if faded then
+		fade(0)
+		faded = false
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(1)
+		if main.Visible and not faded and tick() - lastInput > 6 then
+			fade(0.4)
+			faded = true
+		end
+	end
+end)
 ]]
 	ls.Parent = player:WaitForChild("PlayerScripts")
 end
 
 Players.PlayerAdded:Connect(injectClient)
 
-print("✅ Prospext Executor v3 loaded (client-only UI)")
+print("✅ Prospext Executor v4 loaded")
